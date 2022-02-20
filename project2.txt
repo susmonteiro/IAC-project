@@ -1,0 +1,798 @@
+
+;zona de constantes
+
+G		  EQU	    4E7h		;1/2 aceleracao gravitica no formato xx,xx
+Po		  EQU	    0			;posicao y inicial
+BANANA	  	  EQU	    ')'			;caracter ascii que representa a banana
+MAX_LINHAS	  EQU	    23
+MAX_COLUNAS	  EQU	    79
+PROXIMA_LINHA	  EQU	    0100h		;incrementa a linha
+SEGUNDA_LINHA	  EQU	    0100h		;linha 1 (posicao  1 vertical) da janela de texto
+LARGURA_GORILA	  EQU	    5
+ALTURA_GORILA	  EQU	    0400h		;altura gorila no formato yyxx
+ALTURA_GORILA_N	  EQU	    4			;altura gorila 
+POSICAO_M_INICIAL EQU	    0A1Fh		;posicao da mensgem inicial 
+SEG1		  EQU	    FFF0h		;endereco display 7 segmentos 0
+SEG2		  EQU	    FFF1h		;endereco display 7 segmentos 1
+LEITURA	  	  EQU	    FFFFh		;endereco que permite ler a ultima tecla premida 
+ESCRITA	  	  EQU	    FFFEh		;endereco que permite escrever um caracter na janela
+ESTADO	  	  EQU	    FFFDh		;endereco que permite testar se houve alguma tecla premida
+CTR	  	  EQU	    FFFCh		;endereco que permite colocar o cursor numa dada posicao da janela
+INICIA	  	  EQU	    FFFFh		;valor de inicializacao do cursor
+SP_INI	  	  EQU	    FDFFh		;valor do SP inicial
+TIMER_COUNT	  EQU	    FFF6h		;endereco do valor do contador associado ao temporizador
+TIMER_CTRL	  EQU	    FFF7h		;endereco que permite arrancar ou parar o temporizador
+MASC_INT	  EQU	    FFFAh		;endereco que permite definir os vetores de interrupcao habilitados, um por cada bit de mascara
+MASC_T	 	  EQU	    8000h		;ativa a interrupcao 15 - temporizador
+MASC_B		  EQU	    03FFh		;mascara ativa quando e preciso receber um valor do teclado numerico - ativa as interrupcoes 0 a 9
+MASC_C		  EQU	    0600h		;mascara que ativa apenas a interrupcao 10
+FIM_TEXTO	  EQU 	    0
+ENTER		  EQU	    10			;codigo que ascii que permite mudar de linha - LINE FEED
+A_MAX		  EQU	    90			;valor maximo admitido para o valor do angulo lido
+VLR_NULO	  EQU	    FFFFh		;utilizado para verificar se a variavel VLR tem um valor valido 
+VLR_ALG_AL	  EQU	    8016h		;valor necessario para a funcao gerador, presente no algoritmo facilitado no enunciado do projeto
+
+
+
+
+;zona de variaveis e dados
+
+      	  	  ORIG	    8000h
+A	  	  WORD	    0			;angulo de lancamento
+T	  	  WORD	    0			;variavel tempo - numero no formato xxx,xh
+V	  	  WORD	    0			;velocidade inicial
+Vx	  	  WORD	    0			;componente x da velocidade - numero no formato xx,xxh
+Vy	  	  WORD	    0			;componente y da velocidade - numero no formato xx,xxh
+VALOR_A	  	  WORD	    0			;valor utilizado na funcao gerador
+X1_A		  WORD	    0			;x do primeiro macaco
+X2_A		  WORD	    0			;x do segundo macaco
+Y1_A		  WORD	    0			;y do primeiro macaco
+Y2_A		  WORD	    0			;y do segundo macaco
+M_INICIAL 	  STR	    'PRESS IA TO START',0	;mensagem inicial
+M_VEL	  	  STR	    'velocity: ',0	;mensagem para pedir a velocidade ao utilizador
+M_ANGULO  	  STR	    'angle: ',0		;mensagem para pedir o angulo ao utilizador
+COUNT	 	  WORD	    1	    		;indica se o temporizador ja disparou ou nao 
+VLR		  WORD	    FFFFh		;ultimo valor obtido do teclado numerico. No caso de nenhum valor ter sido inserido, tem o valor nulo de FFFFh
+COMECA		  WORD	    0			;utilizada na funcao da interrupcao 10 e na funcao menu_inicial para verificar se o utilizador ja pressionou o botao IA
+GORILA_ATINGIDO	  WORD	    0			;indica se o gorila foi atingido pela banana
+PONTOS		  WORD	    0			;guarda o numero total de vezes que o jogador ja conseguiu atingir o gorila
+L1        	  STR '  _',0
+L2        	  STR ' c ".',0
+L3        	  STR ' / )',0
+L4        	  STR '\_||',0
+LF1       	  STR ' '			;fim da imagem
+L5        	  STR  '  _',0
+L6        	  STR  '." ) ',0
+L7        	  STR  '/  \ ',0
+L8        	  STR  ' ||_/',0
+LF2       	  STR  ' '			;fim da imagem
+L10        	  STR  '                          ___    ___                                      ',0
+L11		  STR  '                      __ /\_ \  /\_ \                                     ',0
+L12       	  STR  '   __     ___   _ __ /\_\\//\ \ \//\ \      __      ____                  ',0
+L13        	  STR  ' /`_ `\  / __`\/\``__\/\ \ \ \ \  \ \ \   /`__`\   /`,__\       _       _ ',0
+L14        	  STR  '/\ \L\ \/\ \L\ \ \ \/ \ \ \ \_\ \_ \_\ \_/\ \L\.\_/\__, `\    ." )     c ".',0
+L15        	  STR  '\ \____ \ \____/\ \_\  \ \_\/\____\/\____\ \__/.\_\/\____/    /  \     / )',0
+L16        	  STR  ' \/___L\ \/___/  \/_/   \/_/\/____/\/____/\/__/\/_/\/___/      ||_/   \_||',0
+L17        	  STR  '   /\____/                                                                ',0
+L18        	  STR  '   \_/__/                                                                 ',0
+LF3       	  STR  ' '                  	;fim da imagem
+
+
+
+;zona de interrupcoes
+
+;botoes 0 a 9 usados para ler parametros de entrada que o utilizador insere atraves do teclado numerico
+;botao 10 verifica se o utilizador ja deu instrucao para que o jogo fosse iniciado
+;interrupcao 15 - temporizador
+
+		  ORIG	    FE00h
+I0		  WORD	    B0
+I1		  WORD	    B1
+I2		  WORD	    B2
+I3		  WORD	    B3
+I4		  WORD	    B4
+I5		  WORD	    B5
+I6		  WORD	    B6
+I7		  WORD	    B7
+I8		  WORD	    B8
+I9		  WORD	    B9
+IA		  WORD	    B10
+
+		  ORIG	    FE0Fh
+I15	  	  WORD	    TIMER
+
+
+
+
+;zona de programa
+
+
+;funcao main:
+;esqueleto do codigo
+;chama as funcoes base do programa
+
+		  ORIG	    0000h
+	  
+main:		  MOV	    R1,SP_INI		;inicializa a pilha
+	  	  MOV	    SP,R1		;inicializa a pilha
+		  ENI
+	  	  MOV	    R1, INICIA		;inicializa o cursor
+	  	  MOV	    M[CTR], R1		;inicializa o cursor
+	  	  MOV	    M[CTR], R0		;coloca o cursor na posição 00
+		  CALL	    menu_inicial	;desenha o menu inicial do jogo
+reinicia:	  CALL	    constroi_gorilas	;escreve os gorilas nas respetivas posicoes aleatorias
+		  CALL	    pontuacao		;atualiza a pontuacao, isto e, o numero de vezes que o jogador atingiu o outro gorila
+reinserir_dados:  CALL	    recebe_vel		;recebe a velocidade, inserida pelo jogador atraves do teclado numerico
+		  CALL	    recebe_ang		;recebe o angulo, inserido pelo jogador atraves do teclado numerico
+		  MOV	    M[T], R0		;reinicia o tempo
+		  CALL	    calcular_traj	;calcula e imprime a trajetoria da banana
+		  CMP	    M[GORILA_ATINGIDO], R0
+		  BR.Z	    continua
+
+
+;caso o gorila tenha sido atingido, incrementa-se o numero de pontos,
+;apaga-se toda a janela de texto e calculam-se novas posicoes para os gorilas
+
+		  CALL	    apaga_tudo
+		  MOV	    M[GORILA_ATINGIDO], R0
+		  INC	    M[PONTOS]
+		  BR	    reinicia
+
+;em caso contrario, pede-se apenas ao utilizador que insira novos
+;valores para a velocidade e o angulo iniciais
+
+continua:	  PUSH	    R0
+		  CALL	    apaga_linha
+		  PUSH	    SEGUNDA_LINHA
+		  CALL	    apaga_linha
+		  BR	    reinserir_dados
+
+
+;funcao menu_inicial
+;desenha o menu inicial do jogo
+;pede ao utilizador que pressione o botao IA para comecar o jogo 
+
+menu_inicial:	  PUSH	    R1
+		  PUSH	    R7
+		  PUSH	    LF3			;endereco do final da imagem
+		  PUSH	    0F00h		;posicao y inicial do cursor
+		  PUSH	    R0			;posicao x inicial do cursor
+		  PUSH	    L10			;endereco de inicio da imagem
+		  CALL	    print_imagem
+	  	  PUSH	    POSICAO_M_INICIAL	;posicao do cursor para imprimir a imagem inicial 
+	  	  PUSH	    M_INICIAL		;endereço do inicio da frase a ser escrita na janela de texto
+	  	  CALL	    print		;escreve texto M_INICIAL
+		  POP	    R7			;o valor final do endereco da mensagem escrita nao e importante
+	  	  POP	    R7			;a posicao atual do cursor tambem nao e importante
+		  MOV	    R1, MASC_C		;inicializa a mascara que ativa a interrupcao 10 
+		  MOV	    M[MASC_INT], R1
+	  	  MOV	    R1, R0
+start:	  	  INC	    R1			;por cada vez que o ciclo e corrido, incrementa-se o valor do R1
+	 	  CMP	    M[COMECA], R0	;verifica se a variavel COMECA ja tem o valor de 1, o que acontece apenas apos o utilizador ter premido o botao IA
+	  	  BR.Z	    start
+	 	  MOV	    M[VALOR_A], R1	;guarda o numero de vezes que o R1 foi incrementado, utilizando este valor para a funcao gerador
+		  MOV	    M[MASC_INT], R0	;desativa a mascara, para que a interrupcao 10 nao possa continuara ocorrer
+	  	  CALL	    apaga_tudo	 	;limpa toda a janela de texto
+		  POP	    R7
+		  POP	    R1
+		  RET
+		  
+
+;funcao controi_gorilas:
+;chama a funcao gerador, para gerar valores aleatorios para a posicao x e y de ambos os gorilas, guardando estes valores
+;nas respetivas variaveis em memoria, para que estes valores possam ser utilizados posteriormente.
+;alem disso, esta funcao tambem e responsavel por desenhar os gorilas na janela de texto
+
+constroi_gorilas: PUSH	    R1
+		  PUSH	    R2
+		  PUSH	    R0			;guarda espaco para o valor de retorno
+		  CALL	    gerador		;chama esta funcao para gerar um valor aleatorio, neste caso, para a posicao x do gorila da esquerda 
+		  POP	    R1			;valor aleatorio devolvido por esta funcao
+		  MOV	    R2, 35
+		  DIV	    R1, R2		;de modo a obter um valor entre 0 e 34, divide-se o valor obtido a partir da funcao gerador por 35
+		  MOV	    M[X1_A], R2		;coloca a coordenada x do primeiro gorila na variavel X1_A
+		  PUSH	    R0	     		;guarda espaco para o valor de retorno
+		  CALL	    gerador
+		  POP	    R1
+		  MOV	    R2, 10		;de forma semelhante ao x:
+		  DIV	    R1,	R2		;de modo a obter um valor entre 0 e 9, divide-se o valor obtido a partir da funcao gerador por 10
+
+		  
+;uma vez que o numero das linhas e crescente de cima para baixo,
+;e necessario subtrair ao numero de linhas o valor de y obtido para obter uma parabola virada para baixo
+;alem disso, subtrai-se novamente 4 para que todo o gorila fique visivel na janela de texto (uma vez que este y e a posicao da cabeca do macaco e nao dos pes)
+
+		  SUB	    R2, MAX_LINHAS
+		  NEG	    R2	
+		  SUB	    R2, ALTURA_GORILA_N
+		  MOV	    M[Y1_A], R2		;coloca a coordenada y do primeiro gorila na variavel Y1_A
+		  SHL	    R2, 8		;faz um shift left visto que, para imprimir o gorila na janela de texto, a sua coordenada y apenas pode ocupar os 8 bits mais significativos
+		  PUSH	    LF1			;endereco do final da imagem
+		  PUSH	    R2			;posicao y inicial do cursor
+		  PUSH	    M[X1_A]		;posicao x inicial do cursor
+		  PUSH	    L1			;endereco de inicio da imagem
+		  CALL	    print_imagem
+
+;o processo descrito pelas seguintes instrucoes e semelhante ao anterior, mas para o segundo gorila
+
+
+		  PUSH	    R0
+		  CALL	    gerador
+		  POP	    R1
+		  MOV	    R2, 35
+		  DIV	    R1, R2
+		  SUB	    R2, MAX_COLUNAS	;no caso do segundo gorila e necessario subtrair ao numero total de colunas o x aleatorio obtido, para que o valor final esteja entre 45 e 79
+		  NEG	    R2
+		  SUB	    R2, LARGURA_GORILA
+		  MOV	    M[X2_A], R2
+		  PUSH	    R0
+		  CALL	    gerador		;guarda espaco para o valor de retorno
+		  POP	    R1
+		  MOV	    R2, 10
+		  DIV	    R1, R2
+		  SUB	    R2, MAX_LINHAS
+		  NEG	    R2
+		  SUB	    R2, ALTURA_GORILA_N
+		  MOV	    M[Y2_A], R2
+		  SHL	    R2, 8
+		  PUSH	    LF2
+		  PUSH	    R2
+		  PUSH	    M[X2_A]
+		  PUSH	    L5
+		  CALL	    print_imagem
+		  POP	    R2
+		  POP	    R1
+		  RET
+		  
+
+;funcao pontuacao:
+;transforma o valor total dos pontos, guardado em representacao hexadecimal, para decimal
+;mostra este valor, em decimal, ao jogador nos displays de sete segmentos
+;caso o jogador atinja os 99 pontos, entao o jogo termina e o ecra fica limpo
+
+
+pontuacao:	  PUSH	    R1
+		  PUSH	    R2
+		  PUSH	    R3
+		  MOV	    R1, M[PONTOS]
+		  CMP	    R1, 99
+		  CALL.P    final_jogo
+		  MOV	    R2, 16
+		  DIV	    R1, R2		;R1 = algarismo hexadecimal mais significativo, R2 = algarismo hexadecimal menos significativo
+		  MOV	    R3, 10
+		  DIV	    R2, R3		;no caso de R2 > 9, entao nao e representavel em decimal
+		  MOV	    M[SEG1], R3		;coloca o digito menos significativo no display 0
+		  ADD	    R1, R2
+		  MOV	    M[SEG2], R1		;coloca o digito mais significativo no display 1
+		  POP	    R3
+		  POP	    R2
+		  POP	    R1
+		  RET
+
+;funcao recebe_velocidade:
+;imprime uma mensagem a pedir que o utilizador insira um valor para a velocidade.
+;este valor tem sempre dois algarismos e pode ser entre 00 e 99.
+
+
+recebe_vel:	  PUSH	    R7
+		  PUSH	    R0			;posicao do cursor
+	  	  PUSH	    M_VEL		;endereco do inicio da mensagem M_VEL
+	  	  CALL	    print
+		  POP	    R7			;o valor do endereco da mensagem escrita nao e importante
+	  	  POP	    R7			;posicao atual do cursor
+	 	  PUSH	    R0			;guarda espaco na pilha para o valor devolvido		
+		  PUSH	    R7			;podia ser evitado (uma vez que estamos a colocar na pilha um valor que acabamos de retirar de la, sem nenhuma alteracao), mas assim fica estruturado
+	  	  CALL	    ler_n		;funcao que le os valores inseridos atraves do teclado numerico e os transforma num numero hexadecimal de 2 algarismos
+	 	  POP	    R7			;posicao atual do cursor
+	  	  POP	    M[V]		;guarda o valor da velocidade lido na variavel V
+		  SHLA	    M[V], 1		;multiplica o valor da velocidade inserido pelo utilizador por 2, para que seja possivel a banana ultrapasar o numero maximo de colunas		
+		  POP	    R7
+		  RET
+		  
+
+;funcao recebe_ang:
+;imprime uma mensaem a pedir que o utilizador insira um valor para o angulo.
+;este valor tem sempre dois algarismos e pode ser entre 00 e 89.
+;entao, apos obter o valor do angulo d funcao ler_n, verifica-se se este e inferior a 90 graus e, em caso contrario,
+;apaga-se o valor antigo inserido pelo utilizador e pede-se-lhe que insira um novo valor
+
+recebe_ang:	  PUSH      R1
+		  PUSH	    R7
+ciclo_ang:	  PUSH	    SEGUNDA_LINHA	;indica que o cursor deverá estar na segunda linha
+	 	  PUSH	    M_ANGULO		;endereco do inicio da mensagem M_ANGULO
+	  	  CALL	    print
+	  	  POP	    R7			;este valor nao e importante
+		  POP	    R7			;posicao atual do cursor
+ler_ang:  	  PUSH	    R0			;guarda espaco na pilha para o valor devolvido
+		  PUSH	    R7			;pelas mesmas razoes da funcao recebe_vel, o PUSH e POP	R7 podiam ser evitados
+	  	  CALL	    ler_n		;funcao que le os valores inseridos atraves do teclado numerico e os transforma num numero hexadecimal de 2 algarismos
+	  	  POP	    R7			;posicao do cursor
+	  	  POP	    R1			;valor do angulo lido
+		  CMP	    R1, A_MAX		;verifica se o valor inserido pelo utilizador e inferior aos 89 graus, admitidos pelo programa
+	  	  BR.N	    segue
+	  	  PUSH	    SEGUNDA_LINHA	;linha a ser apagada
+		  CALL	    apaga_linha
+	  	  BR	    ciclo_ang
+		  BR	    fim_ang
+segue:	  	  MOV	    M[A], R1
+fim_ang:	  POP	    R7
+		  POP	    R1
+		  RET
+		  
+
+;funcao calcular_trajetoria:
+;escreve a banana nas posicoes sucessivas que esta ocupa, utilizando o temporizador entre as posicoes
+
+
+calcular_traj:	  PUSH	    R1
+		  PUSH	    R2
+		  PUSH	    R3
+		  PUSH	    R4
+		  PUSH	    R5
+		  PUSH	    R6
+		  PUSH	    R7
+		  PUSH	    R0			;espaco para guardar a componente y da velocidade no formato xx,xxh
+	  	  PUSH	    R0			;espaco para guardar a componente x da velocidade no formato xx,xxh
+	  	  PUSH	    M[A]
+	  	  PUSH	    M[V]
+	  	  CALL	    vel			;funcao que calcula as componentes x e y da velocidade inicial 
+	  	  POP	    M[Vx]		;Vx = componente x da velocidade
+	  	  POP	    M[Vy]		;Vy = componente y da velocidade
+		  MOV	    R1, MASC_T		;inicializa a mascara, permitindo a interrupcao 15, que corresponde ao temporizador
+		  MOV	    M[MASC_INT], R1
+ciclo:	  	  PUSH	    R0			;espaco para guardar a posicao y
+	  	  PUSH	    R0			;espaco para guardar a posicao x
+	  	  PUSH	    Po
+	  	  PUSH	    M[Vy]
+	  	  PUSH	    M[Vx]
+	  	  CALL	    xy			;funcao que calcula a posicao x e y da banana num determinado instante
+	  	  POP	    R1			;R1 = posicao x no instante T - formato: xxx,xh
+	  	  POP	    R2			;R2 = posicao y no instante T - formato: xxx,xh
+		  SHRA	    R2, 8
+		  MOV	    R3, M[Y1_A]
+		  ADD	    R3, 2		;para que a banana inicie a sua trajetoria na "mao" do gorila
+		  SUB	    R3, R2
+		  JMP.N	    acaba_movimento	;se a banana sair da janela de texto por cima, isto e, a coordenada y ser inferior a zero, entao o movimento da banana termina
+escreve_banana:	  SHL	    R3, 8		;posicao y atual da banana
+		  SHR	    R1, 8		;posicao x atual da banana
+		  ADD	    R1, M[X1_A]
+		  ADD	    R1, LARGURA_GORILA
+		  CMP	    R1, MAX_COLUNAS	;quando a posicao x ultrapassar as 80 colunas, entao a banana nunca ira atingir o gorila
+		  JMP.P     acaba_movimento    	;se a banana sair da janela de texto pela direita, entao o movimento termina
+	  	  ADD	    R1, R3		;posicao xy atual da banana
+	  	  PUSH	    R1			;posicao do cursor
+	  	  CALL	    print_banana
+		  PUSH	    R1
+		  CALL	    atingiu_gorila	;verifica se a banana atingiu ou nao o gorila na posicao atual 
+		  CMP	    M[GORILA_ATINGIDO], R0
+		  BR.NZ	    acaba_movimento	;se o gorila tiver sido atingido, entao o movimento da banana termina
+		  MOV	    R4, R1	
+	  	  AND	    R4, FF00h		;componente y da posicao da banana
+	  	  MOV	    R5, MAX_LINHAS
+	  	  SHL	    R5, 8
+	  	  CMP	    R4, R5		;quando a componente y for maior do que o numero de linhas maximo, a banana chegou ao fim da sua trajetoria (chegou ao "chao")
+		  BR.P      acaba_movimento
+		  CALL	    t_count		;funcao que verifica se o temporizador ja disparou
+	  	  PUSH	    R1
+	  	  CALL	    apaga_posicao	;apaga a posicao atual da banana
+	  	  JMP	    ciclo		;calcula e imprime a nova posicao da banana
+acaba_movimento:  MOV	    M[MASC_INT], R0	;desativa a mascara
+		  POP	    R7
+		  POP	    R6
+		  POP	    R5
+		  POP	    R4
+		  POP	    R3
+		  POP	    R2
+		  POP	    R1
+		  RET
+
+
+;funcao t_count:
+;verifica se o temporizador ja disparou, o que acontece quando a variavel COUNT tem o valor de 1
+
+t_count:  	  CMP	    M[COUNT], R0
+	  	  BR.Z	    t_count		;apenas passa para a proxima instrucao quando a variavel count e diferente da variavel count e reposto
+	  	  DEC	    M[COUNT]		;apos o temporizador disparar, e tal ser verificado por esta funcao, entao o valor de 
+	  	  CALL	    INI_T		;inicializa novamente o temporizador
+		  RET
+
+;funcao atingiu_gorila:
+;verifica se a posicao atual da banana coincide com a posicao do segundo gorila e, em caso afirmativo, a variavel GORILA_ATINGIDO fica com o valor de 1
+
+atingiu_gorila:	  PUSH	    R1
+		  PUSH	    R2
+		  PUSH	    R3
+		  MOV	    R1, M[SP+5]		;recebe a posicao atual do cursor
+		  AND	    R1, FF00h		;interessa apenas comparar a coordenada y da posicao 
+		  MOV	    R2, M[Y2_A]
+		  SHL	    R2, 8
+		  CMP	    R1, R2		;comparar com a posicao y do segundo gorila
+		  BR.N	    nao_atingiu		;se for menor, nao atingiu
+		  ADD	    R2, ALTURA_GORILA	
+		  CMP	    R1, R2
+		  BR.P	    nao_atingiu		;se for superior a coordenada y do segundo gorila mais a sua altura, tambem nao atingiu
+		  MOV	    R1, M[SP+5]		;recebe novamente a posicao atual do cursor
+		  AND	    R1, 00FFh		;interessa apenas comparar a coordenada x da posicao 
+		  MOV	    R2, M[X2_A]
+		  CMP	    R1, R2		;comparar com a posicao x do segundo gorila
+		  BR.N	    nao_atingiu		;se for menor nao atingiu
+		  ADD	    R2, LARGURA_GORILA
+		  CMP	    R1, R2
+		  BR.P	    nao_atingiu		;se for superior a coordenada x mais a largura do gorila, entao tambem nao atingiu
+		  INC	    M[GORILA_ATINGIDO]	;caso contrario, o gorila foi atingido, e por isso a variavel GORILA_ATINGIDO guarda o valor de 1
+nao_atingiu:	  POP	    R3
+		  POP	    R2
+		  POP	    R1
+		  RETN	    1
+
+
+
+;funcao ler_n:
+;le os valores inseridos pelo utilizador atraves do teclado numerico e imprime-os na janela de texto, para que fiquem visiveis para o utilizador
+	  
+
+ler_n:		  PUSH 	    R1
+	  	  PUSH	    R2
+	 	  PUSH	    R3
+	  	  PUSH	    R4
+	  	  PUSH 	    R5
+	  	  PUSH	    R6
+	  	  PUSH 	    R7
+	  	  MOV	    R4, R0		;registo que guarda o valor total
+	  	  MOV	    R6, 1		;contador
+	  	  MOV	    R7, M[SP+9]		;colocar no registo 7 a posicao atual do contador
+  		  MOV	    R1, MASC_B		;inicializa a mascara, permitindo as interrupcoes 0 a 9
+		  MOV	    M[MASC_INT], R1
+ciclo_ler:	  MOV	    R1, M[VLR]		;no R1, fica o valor inserido atraves do teclado numerico
+		  CMP	    R1, VLR_NULO	;verifica se foi inserido algum valor (isto e, se o valor de R1 e diferente do valor estabelecido como nulo)
+		  BR.Z	    ciclo_ler
+		  MOV	    R2, VLR_NULO
+		  MOV	    M[VLR], R2		;o valor da variavel VLR e reniciado, isto e, volta a ser colocado nesta posicao de memoria o VLR_NULO
+	  	  MOV	    M[CTR], R7
+	  	  INC	    R7			;a posicao do cursor e incrementada
+	  	  MOV	    R2, 10		
+	  	  MUL	    R2, R4		;multiplica o valor guardado anteriormente no R2 por 10, para que passe a ocupar o digito mais significativo
+	  	  ADD	    R4, R1		;adiciona ao valor antigo, o novo valor
+		  ADD	    R1, '0'		;para escrever o valor na janela de texto, e necessario escrever o codigo assembly deste caracter
+	  	  MOV	    M[ESCRITA], R1
+	  	  INC	    R6			;incrementa o contador
+	  	  CMP	    R6, 2		;o ciclo corre 2 vezes, para que os valores recebidos tenham 2 algarismos
+	  	  BR.P	    fim_ler
+	  	  BR	    ciclo_ler
+fim_ler:	  MOV	    M[MASC_INT], R0	;desativa a mascara
+		  MOV	    M[SP+10], R4	;valor lido
+	  	  MOV	    M[SP+9], R7		;posicao do cursor
+	  	  POP	    R7
+	  	  POP	    R6
+	  	  POP	    R5
+	  	  POP	    R4
+	  	  POP	    R3
+	  	  POP	    R2
+	  	  POP	    R1
+	  	  RET
+
+;funcao apaga_posicao:
+;apaga a posicao indicada pela posicao atual do cursor
+
+apaga_posicao:	  PUSH		R1
+		  PUSH		R2
+		  MOV		R2, M[SP+4]	;posicao a ser apagada
+		  MOV		R1, ' '		;caracter que permite eleminar o caracter que estava nessa posicao anteriormente
+		  MOV		M[CTR], R2
+		  MOV		M[ESCRITA], R1
+		  POP		R2
+		  POP		R1
+		  RETN 	1
+
+;funcao apaga_linha:
+;recorrendo a funcao apaga_posicao, permite apagar uma determinada linha da janela de texto
+
+
+apaga_linha:	  PUSH	    R7
+	  	  MOV	    R7, M[SP+3]		;linha a ser eliminada no formato yy00h
+		  ADD	    R7, MAX_COLUNAS	;comeca a apagar as posicoes da linha pela posicao o mais a direita possivel 
+ciclo_apaga:  	  TEST	    R7, 00FFh		;quando a coordenada x for inferior a zero, toda a linha foi apagada com sucesso
+	  	  BR.Z	    fim_apaga
+		  PUSH	    R7
+		  CALL	    apaga_posicao
+	  	  DEC	    R7			;decrementa a coordenada x do cursor 
+	  	  BR	    ciclo_apaga
+fim_apaga:	  PUSH	    R7
+		  CALL	    apaga_posicao
+		  POP	    R7
+	  	  RETN	    1
+		  
+
+;funcao apaga_tudo:
+;ao colocar o cursor na posicao FFFFh (INICIA), todos os caracteres na janela de texto sao eliminados
+
+apaga_tudo:	  PUSH	    R1
+		  MOV	    R1, INICIA
+		  MOV	    M[CTR], R1
+		  POP	    R1
+		  RET
+
+;funcao print:
+;escreve uma determinada mensagem (STR) na janela de texto, comecando numa posicao especificada
+		  
+	  
+print:		  PUSH	    R1
+	  	  PUSH	    R2
+	  	  PUSH	    R7
+	  	  MOV	    R7, M[SP+6]		;posicao do cursor
+	  	  MOV	    R1, M[SP+5]	 	;endereco da mensagem a ser escrita na janela de texto
+c_print:  	  MOV	    R2, M[R1]	 	;move para R2 o conteudo da posicao de memoria cujo endereco e o valor de R1
+	  	  CMP	    R2, FIM_TEXTO 	;testa se a mensagem chegou ao fim
+	  	  BR.Z	    fim_print		;em caso afirmativo, sao corridas as instrucoes do final da funcao 
+	  	  MOV	    M[CTR], R7
+	  	  MOV	    M[ESCRITA], R2
+	  	  INC	    R1
+	  	  INC	    R7
+	  	  BR	    c_print
+fim_print:	  MOV	    M[SP+6], R7		;a funcao devolve a posicao atual do cursor
+		  INC	    R1
+		  MOV	    M[SP+5], R1		;devolve o endereco do proximo caracter/valor a ser escrito na janela de texto 
+	  	  POP	    R7
+	  	  POP	    R2
+	  	  POP	    R1
+	  	  RET
+
+;funcao print_imagem:
+;recorrendo a funcao print, escreve na janela de texto uma imagem, constituida por varias linhas de cadeias de caracteres
+
+print_imagem:	  PUSH      R1
+          	  PUSH      R2
+          	  PUSH      R3
+          	  PUSH 	    R4
+          	  PUSH      R5
+          	  PUSH      R6
+          	  PUSH      R7
+          	  MOV       R3, M[SP+12]	;endereco de fim
+          	  MOV       R4, M[SP+9]   	;endereco da linha a ser escrita
+          	  MOV       R6, M[SP+11]  	;posicao y do cursor no formato yy00h
+          	  MOV       R5, M[SP+10]  	;posicao x do cursor no formato 00xxh
+          	  ADD       R6, R5
+ciclo_f2: 	  CMP       R4, R3
+          	  BR.Z      fim_print_imagem
+          	  PUSH      R6			;posicao do cursor
+          	  PUSH      R4		  	;endereco da linha a ser escrita
+          	  CALL      print
+		  POP	    R4			;endereco que corresponde ao final da mensagem
+          	  POP       R6			;posicao atual do cursor
+          	  ADD       R6, PROXIMA_LINHA
+          	  AND       R6, FF00h		;todas as linhas constituintes da imagem comecam a ser impressas na mesma coordenada x
+          	  ADD       R6, R5
+          	  BR        ciclo_f2
+fim_print_imagem: POP       R7
+          	  POP       R6
+          	  POP       R5
+          	  POP       R4
+          	  POP       R3
+          	  POP       R2
+          	  POP       R1
+          	  RETN      4
+		  
+
+;funcao print_banana:
+;recebe a posicao do cursor em que a banana vai ser imprimida
+
+print_banana:	  PUSH	R1
+		  MOV		R1, M[SP+3]	;posicao atual da banana
+		  MOV	   	M[CTR], R1
+	  	  MOV	    	R1, BANANA
+	  	  MOV	    	M[ESCRITA], R1
+		  POP	    	R1
+		  RETN	1
+
+;funcao gerador:
+;calcula um valor aleatorio, de acordo com o algoritmo facultado no enunciado do projeto
+
+gerador:	  PUSH		R1
+		  PUSH		R2
+		  MOV		R1, M[VALOR_A]
+		  TEST		R1, 0001h
+		  BR.Z		gerador_2
+		  XOR		R1, VLR_ALG_AL
+gerador_2:	  ROR		R1, 1
+		  MOV		M[VALOR_A], R1
+		  MOV		M[SP+4], R1
+		  POP		R2
+		  POP		R1
+		  RET
+
+
+;funcao vel:		    
+;partindo da velocidade e angulo inseridos, calcula as componentes x e y da velocidade	  
+	  
+vel:		  PUSH	    R1
+	  	  PUSH	    R2
+	  	  PUSH	    R3
+	  	  PUSH	    R4
+	  	  MOV	    R1,M[SP+7]	;recebe o valor do angulo inserido 
+	  	  PUSH	    R1	
+	  	  CALL	    cos		;chama a funcao que calcula o cosseno do angulo A - numero no formato xx,xxh
+	  	  POP	    R2		;R2 = cos(A)
+	  	  MOV	    R1,M[SP+6]	;recebe o valor da velocidade inserida
+	 	  MUL	    R1,R2	;R2 = Vcos(A) - componente horizontal (x) da velocidade - numero no formato xx,xxh
+	  	  MOV	    M[SP+8],R2
+	  	  MOV	    R3,M[SP+7]	;R3 = angulo inserido	
+	  	  PUSH	    R3
+	  	  CALL	    sin		;chama a funcao que calcula o seno do angulo A - numero no formato xx,xxh
+	  	  POP	    R4		;R4 = sin(A)
+	  	  MOV	    R3,M[SP+6]	;R3 = velocidade inserida
+	  	  MUL	    R3,R4	;R4 = Vsin(A) - componente vertical (y) da velocidade - numero no formato xx,xxh
+	  	  MOV	    M[SP+9],R4
+	  	  POP	    R4
+	  	  POP	    R3
+	  	  POP	    R2
+	  	  POP	    R1
+	  	  RETN	    2
+
+;funcao xy:
+;incrementa o tempo (em 1s) e calcula as posicoes x e y nesse instante 
+
+xy:	  PUSH	    R1
+	  PUSH	    R2
+	  PUSH	    R3
+	  PUSH	    R4
+	  PUSH	    R5
+	  PUSH	    R6
+	  PUSH	    R7
+	  MOV	    R2, M[T]	;mover o valor de tempo para R2
+	  ADD	    R2, 10	;tempo incrementa 1 por cada ciclo - formato do numero: xxx,xh  
+	  MOV	    M[T],R2	;guardar o tempo, ja incrementado, no mesmo endereco 
+x:	  MOV	    R1,M[SP+9]	;VX = Vcos(A)	
+	  MOV	    R2,M[T]
+	  MUL	    R2,R1	;R1 = VTcos(A) - numero no formato x,xxxh
+	  SHR	    R1,8	;guardar os 8 bits mais signficativos do numero nos ultimos 8 bits do registo 
+	  SHL	    R2,8	;guardar os 8 bits menos significativos do numero nos primeiros 8 bits do registo 
+	  ADD	    R1,R2	;adicionar o valor de R1 ao valor de R2, para que o valor esperado fique todo no mesmo registo - numero no formato xxx,xh
+	  MOV	    M[SP+12],R1
+y:	  MOV	    R1,M[SP+10]	
+	  MOV	    R2,M[T]
+	  MUL	    R2,R1	;R1 = VTsen(A)- numero no formato x,xxxh
+	  SHR	    R1,8	;
+	  SHL	    R2,8	;mesmo raciocinio do calculo da posicao x - numero final no formato xxx,xh
+	  ADD	    R1,R2	;
+	  MOV	    R3,G	;R3 = 1/2 aceleracao gravitica
+	  MOV	    R4,M[T]
+	  MOV	    R5,M[T]
+	  MUL	    R4,R5	;T*T - tempo ao quadrado - numero no formato xx,xxh
+	  SHR	    R5,4	;visto que o tempo esta ao quadrado, para ser coerente com o calculo de VTsen(A), e necessario fazer o shift para a direita de 4 bits - numero no formato xxx,xh
+	  MUL	    R5,R3	;R3 = 1/2G(T*T) - numero no formato x,xxxh
+	  SHR	    R3,8	;
+	  SHL	    R5,8	;mesmo raciocinio do calculo da posicao x - numero final no formato xxx,xh
+	  ADD	    R3,R5	;
+	  SUB	    R1,R3	;R1 = VTsen(A) - 1/2G(T**2) - numero no formato xxx,xh
+	  ADD	    R1,M[SP+11]	;R1 = Po + VTsen(A) - 1/2G(T**2) - formato do numero: xxx,xh
+	  MOV	    M[SP+13],R1
+	  POP	    R7
+	  POP	    R6
+	  POP	    R5
+	  POP	    R4
+	  POP	    R3
+	  POP	    R2
+	  POP	    R1
+	  RETN	    3
+	  
+
+;funcoes trigonometricas cos e sin:
+
+cos:	  PUSH	    R1
+	  PUSH	    R2
+	  PUSH	    R3
+	  PUSH	    R4
+	  PUSH	    R5
+	  MOV	    R1,M[SP+7]	;mover o parametro (angulo A) para o R1
+	  ADD	    R1,90	;R1 = x + 90
+	  BR	    funcao 
+sin:	  PUSH	    R1
+	  PUSH	    R2
+	  PUSH	    R3
+	  PUSH	    R4
+	  PUSH	    R5
+	  MOV       R1,M[SP+7]  ;R1 = x
+funcao:   MOV       R3,R1
+          MOV       R4,R1
+          MOV       R2,4
+          MUL       R1,R2       ;R2 = 4x
+          SUB       R3,180      ;R3 = x - 180
+          NEG       R3          ;R3 = 180 - x
+          MOV       R5,R3
+          MUL       R2,R3       ;R3 = 4x(180 - x)
+          MUL       R4,R5       ;R5 = x(180 - x)
+          SUB       R5,40500    ;R5 = x(180 - x) - 40500
+          NEG       R5          ;R5 = 40500 - x(180 - x)
+          SHR	    R5,8        ;R5 = xx,xxh
+          DIV       R3,R5       ;R3 = xx,xxh
+          MOV       M[SP+7],R3	;guardar o valor final na pilha
+	  POP	    R5
+	  POP	    R4
+	  POP	    R3
+	  POP	    R2
+	  POP	    R1
+          RET
+
+;funcao INI_T:
+;funcao que inicializa o temporizador, indicando que este deve disparar quando passarem 100 milissegundos
+
+
+INI_T:	  PUSH	R1
+	  MOV	R1, 1
+	  MOV	M[TIMER_COUNT], R1
+	  MOV	R1, 1
+	  MOV	M[TIMER_CTRL], R1
+	  POP	R1
+	  RET
+
+
+;funcao final_jogo:
+;quando os 99 pontos sao atingidos, a janela de texto e apagada e o programa termina
+
+final_jogo:	CALL	apaga_tudo
+fim_jogo:	BR	fim_jogo
+
+
+;interrupcoes:
+
+;cada uma das interrupcoes de 0 a 9 guarda o indice do botao que foi premido no teclado numerico na variavel VLR
+
+B0:	  MOV	    M[VLR], R0
+	  RTI
+
+B1:	  MOV	    R1, 1
+	  MOV	    M[VLR], R1
+	  RTI
+	  
+B2:	  MOV	    R1, 2
+	  MOV	    M[VLR], R1
+	  RTI
+
+B3:	  MOV	    R1, 3
+	  MOV	    M[VLR], R1
+	  RTI
+
+B4:	  MOV	    R1, 4
+	  MOV	    M[VLR], R1
+	  RTI
+
+B5:	  MOV	    R1, 5
+	  MOV	    M[VLR], R1
+	  RTI
+
+B6:	  MOV	    R1, 6
+	  MOV	    M[VLR], R1
+	  RTI
+
+B7:	  MOV	    R1, 7
+	   MOV	    M[VLR], R1
+	  RTI
+
+B8:	  MOV	    R1, 8
+	  MOV	    M[VLR], R1
+	  RTI
+
+B9:	  MOV	    R1, 9
+	  MOV	    M[VLR], R1
+	  RTI
+
+
+;quando premido o IA, a variavel COMECA fica com o valor de 1, indicando, na funcao menu_inicial, que o jogador esta pronto para comecar o jogo 
+
+B10:	  INC	    M[COMECA]
+	  RTI
+
+;temporizador: quando e disparado, a variavel COUNT e incrementada, indicando na funcao calcular_trajetoria que passaram 100 milissegundos 
+
+TIMER:	  INC	    M[COUNT]
+	  RTI
+
+
+
+
+
+
+
+
+
+	  

@@ -1,0 +1,163 @@
+
+;zona de constantes
+
+G	  EQU	    4E7h	;1/2 aceleracao gravitica no formato xx,xx
+Po	  EQU	    0		;posicao y inicial
+A	  EQU	    45		;angulo de lancamento
+SP_INI	  EQU	    FDFFh	;valor do SP inicial
+
+
+
+;zona de variaveis e dados
+
+      	  ORIG	    8000h
+T	  WORD	    0		;variavel tempo - numero no formato xxx,xh
+V	  WORD	    50		;velocidade inicial
+Vx	  WORD	    0		;componente x da velocidade - numero no formato xx,xxh
+Vy	  WORD	    0		;componente y da velocidade - numero no formato xx,xxh
+X	  WORD	    0		;posicao x num determinado instante - numero no formato xxx,xh
+Y	  WORD	    0		;posicao y num determinado instante - numero no formato xxx,xh
+
+
+;zona de programa
+
+	  ORIG	    0000h
+	  
+	  MOV	    R1,SP_INI	;inicializar a pilha
+	  MOV	    SP,R1	;inicializar a pilha
+	  PUSH	    R0		;espaco para guardar a componente y da velocidade no formato xx,xxh
+	  PUSH	    R0		;espaco para guardar a componente x da velocidade no formato xx,xxh
+	  PUSH	    A
+	  PUSH	    M[V]
+	  CALL	    vel		;funcao que calcula as componentes x e y da velocidade inicial 
+	  POP	    R1		;R1 = componente x da velocidade
+	  POP	    R2		;R2 = componente y da velocidade
+	  MOV	    M[Vx],R1
+	  MOV	    M[Vy],R2
+	  MOV	    R7,0	;permite incrementar o endereco em que as sucessivas posicoes x e y vao ser guardadas
+ciclo:	  PUSH	    R0		;espaco para guardar a posicao y
+	  PUSH	    R0		;espaco para guardar a posicao x
+	  PUSH	    Po
+	  PUSH	    M[Vy]
+	  PUSH	    M[Vx]
+	  CALL	    xy		;funcao que calcula a posicao x e y da banana num determinado instante
+	  POP	    R1		;R1 = posicao x no instante T - formato: xxx,xh
+	  POP	    R2		;R2 = posicao y no instante T - formato: xxx,xh
+	  MOV	    M[R7+X],R1	;X = posicao x no instante T
+	  MOV	    M[R7+Y],R2	;Y = posicao y no instante T
+	  ADD	    R7,2	;permite incrementar o endereco onde vao ser guardados os proximos valores das posicoes x e y
+	  CMP	    R2,0	;enquanto a componente y da posicao da banana nao for zero, o ciclo repete-se
+	  JMP.P	    ciclo
+end:	  BR	    end	
+	  
+vel:	  PUSH	    R1
+	  PUSH	    R2
+	  PUSH	    R3
+	  PUSH	    R4
+	  MOV	    R1,M[SP+7]
+	  PUSH	    R1	
+	  CALL	    cos		;chama a funcao que calcula o cosseno do angulo A - numero no formato xx,xxh
+	  POP	    R2		;R2 = cos(A)
+	  MOV	    R1,M[SP+6]
+	  MUL	    R1,R2	;R2 = Vcos(A) - componente horizontal (x) da velocidade - numero no formato xx,xxh
+	  MOV	    M[SP+8],R2
+	  MOV	    R3,M[SP+7]	
+	  PUSH	    R3
+	  CALL	    sin		;chama a funcao que calcula o seno do angulo A - numero no formato xx,xxh
+	  POP	    R4		;R4 = sin(A)
+	  MOV	    R3,M[SP+6]
+	  MUL	    R3,R4	;R4 = Vsin(A) - componente vertical (y) da velocidade - numero no formato xx,xxh
+	  MOV	    M[SP+9],R4
+	  POP	    R4
+	  POP	    R3
+	  POP	    R2
+	  POP	    R1
+	  RETN	    2
+
+xy:	  PUSH	    R1
+	  PUSH	    R2
+	  PUSH	    R3
+	  PUSH	    R4
+	  PUSH	    R5
+	  PUSH	    R6
+	  PUSH	    R7
+	  MOV	    R2,M[T]	;mover o valor de tempo para R2	
+	  INC	    R2		;tempo incrementa 1/16 por cada ciclo - formato do numero: xxx,xh  
+	  MOV	    M[T],R2	;guardar o tempo, ja incrementado, no mesmo endereco
+	  
+x:	  MOV	    R1,M[SP+9]	
+	  MOV	    R2,M[T]
+	  MUL	    R2,R1	;R1 = VTcos(A) - numero no formato x,xxxh
+	  SHR	    R1,8	;guardar os 8 bits mais signficativos do numero nos ultimos 8 bits do registo 
+	  SHL	    R2,8	;guardar os 8 bits menos significativos do numero nos primeiros 8 bits do registo 
+	  ADD	    R1,R2	;adicionar o valor de R1 ao valor de R2, para que o valor esperado fique todo no mesmo registo - numero no formato xxx,xh
+	  MOV	    M[SP+12],R1
+	  
+y:	  MOV	    R1,M[SP+10]	
+	  MOV	    R2,M[T]
+	  MUL	    R2,R1	;R1 = VTsen(A)- numero no formato x,xxxh
+	  SHR	    R1,8	;
+	  SHL	    R2,8	;mesmo raciocinio do calculo da posicao x - numero final no formato xxx,xh
+	  ADD	    R1,R2	;
+	  MOV	    R3,G	;R3 = 1/2 aceleracao gravitica
+	  MOV	    R4,M[T]
+	  MOV	    R5,M[T]
+	  MUL	    R4,R5	;T*T - tempo ao quadrado - numero no formato xx,xxh
+	  SHR	    R5,4	;visto que o tempo esta ao quadrado, para ser coerente com o calculo de VTsen(A), e necessario fazer o shift para a direita de 4 bits - numero no formato xxx,xh
+	  MUL	    R5,R3	;R3 = 1/2G(T*T) - numero no formato x,xxxh
+	  SHR	    R3,8	;
+	  SHL	    R5,8	;mesmo raciocinio do calculo da posicao x - numero final no formato xxx,xh
+	  ADD	    R3,R5	;
+	  SUB	    R1,R3	;R1 = VTsen(A) - 1/2G(T**2) - numero no formato xxx,xh
+	  ADD	    R1,M[SP+11]	;R1 = Po + VTsen(A) - 1/2G(T**2) - formato do numero: xxx,xh
+	  MOV	    M[SP+13],R1
+	  POP	    R7
+	  POP	    R6
+	  POP	    R5
+	  POP	    R4
+	  POP	    R3
+	  POP	    R2
+	  POP	    R1
+	  RETN	    3
+
+cos:	  PUSH	    R1
+	  PUSH	    R2
+	  PUSH	    R3
+	  PUSH	    R4
+	  PUSH	    R5
+	  MOV	    R1,M[SP+7]	;mover o parametro (angulo A) para o R1
+	  ADD	    R1,90	;R1 = x + 90
+	  BR	    funcao 
+sin:	  PUSH	    R1
+	  PUSH	    R2
+	  PUSH	    R3
+	  PUSH	    R4
+	  PUSH	    R5
+	  MOV       R1,M[SP+7]  ;R1 = x
+funcao:   MOV       R3,R1
+          MOV       R4,R1
+          MOV       R2,4
+          MUL       R1,R2       ;R2 = 4x
+          SUB       R3,180      ;R3 = x - 180
+          NEG       R3          ;R3 = 180 - x
+          MOV       R5,R3
+          MUL       R2,R3       ;R3 = 4x(180 - x)
+          MUL       R4,R5       ;R5 = x(180 - x)
+          SUB       R5,40500    ;R5 = x(180 - x) - 40500
+          NEG       R5          ;R5 = 40500 - x(180 - x)
+          SHR	    R5,8        ;R5 = xx,xxh
+          DIV       R3,R5       ;R3 = xx,xxh
+          MOV       M[SP+7],R3	;guardar o valor final na pilha
+	  POP	    R5
+	  POP	    R4
+	  POP	    R3
+	  POP	    R2
+	  POP	    R1
+          RET
+
+
+
+
+
+
+	  
